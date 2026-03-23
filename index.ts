@@ -1,5 +1,13 @@
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
-import { jsonResult } from "openclaw/plugin-sdk";
+
+// jsonResult was removed from openclaw/plugin-sdk in 2026.3.22+
+// Inlined here to avoid the import error
+function jsonResult(payload: unknown) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(payload, null, 2) }],
+    _jsonPayload: payload,
+  };
+}
 
 const DEFAULT_BASE_URLS: string[] = [];
 const PLUGIN_ID = "atlas-memory-opencalw-plugin";
