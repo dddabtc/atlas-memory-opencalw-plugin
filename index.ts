@@ -1,4 +1,4 @@
-import type { OpenClawPluginApi } from "openclaw/plugin-sdk";
+import type { OpenClawPluginApi } from "openclaw/plugin-sdk/plugin-entry";
 
 // jsonResult was removed from openclaw/plugin-sdk in 2026.3.22+
 // Inlined here to avoid the import error
@@ -122,6 +122,45 @@ async function atlasGet(api: OpenClawPluginApi, id: string): Promise<{ id: strin
     title?: string;
     content?: string;
   };
+}
+
+async function atlasSave(
+  api: OpenClawPluginApi,
+  params: {
+    id?: string;
+    title?: string;
+    content?: string;
+    importance?: number;
+    confidence?: number;
+    source?: string;
+    sourceThreadId?: string | null;
+    labels?: string[];
+    metadata?: Record<string, unknown>;
+  },
+): Promise<any> {
+  const payload: Record<string, unknown> = {};
+  if (params.title !== undefined) payload.title = params.title;
+  if (params.content !== undefined) payload.content = params.content;
+  if (params.importance !== undefined) payload.importance = params.importance;
+  if (params.confidence !== undefined) payload.confidence = params.confidence;
+  if (params.source !== undefined) payload.source = params.source;
+  if (params.sourceThreadId !== undefined) payload.source_thread_id = params.sourceThreadId;
+  if (params.labels !== undefined) payload.labels = params.labels;
+  if (params.metadata !== undefined) payload.metadata = params.metadata;
+
+  if (params.id) {
+    return await fetchJsonFromAtlas(api, `/memories/${encodeURIComponent(params.id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
+
+  return await fetchJsonFromAtlas(api, "/memories", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
 }
 
 function extractAtlasId(path: string): string | null {
@@ -341,6 +380,83 @@ export default {
         },
       } as any,
       { names: ["memory_get"] },
+    );
+
+    api.registerTool(
+      {
+        label: "Memory Save",
+        name: "memory_save",
+        description:
+          "Create or update an Atlas memory. Omit id/path to create; provide id or atlas:<id> path to patch an existing memory.",
+        parameters: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            path: { type: "string" },
+            title: { type: "string" },
+            content: { type: "string" },
+            importance: { type: "number" },
+            confidence: { type: "number" },
+            source: { type: "string" },
+            sourceThreadId: { type: ["string", "null"] },
+            labels: { type: "array", items: { type: "string" } },
+            metadata: { type: "object", additionalProperties: true },
+          },
+          additionalProperties: false,
+        },
+        execute: async (_toolCallId: string, params: any) => {
+          try {
+            const rawPath = typeof params?.path === "string" ? params.path.trim() : "";
+            const rawId = typeof params?.id === "string" ? params.id.trim() : "";
+            const id = extractAtlasId(rawPath) ?? (rawId ? extractAtlasId(rawId) ?? rawId : undefined);
+            const title = typeof params?.title === "string" ? params.title.trim() : undefined;
+            const content = typeof params?.content === "string" ? params.content : undefined;
+
+            if (!id && !title && !content) {
+              return jsonResult({
+                ok: false,
+                error: "Provide content/title to create a memory, or id/path plus fields to update one.",
+              });
+            }
+
+            const result = await atlasSave(api, {
+              id,
+              title,
+              content,
+              importance: Number.isFinite(Number(params?.importance)) ? Number(params.importance) : undefined,
+              confidence: Number.isFinite(Number(params?.confidence)) ? Number(params.confidence) : undefined,
+              source: typeof params?.source === "string" ? params.source : undefined,
+              sourceThreadId:
+                params?.sourceThreadId === null || typeof params?.sourceThreadId === "string"
+                  ? params.sourceThreadId
+                  : undefined,
+              labels: Array.isArray(params?.labels)
+                ? params.labels.map((v: unknown) => String(v)).filter((v: string) => v.length > 0)
+                : undefined,
+              metadata:
+                params?.metadata && typeof params.metadata === "object" && !Array.isArray(params.metadata)
+                  ? params.metadata
+                  : undefined,
+            });
+            const savedId = String(result?.id ?? id ?? "").trim();
+            return jsonResult({
+              ok: true,
+              action: id ? "updated" : "created",
+              id: savedId || undefined,
+              path: savedId ? `atlas:${savedId}` : undefined,
+              title: result?.title ?? title,
+              created_at: result?.created_at,
+              updated_at: result?.updated_at,
+            });
+          } catch (err) {
+            return jsonResult({
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        },
+      } as any,
+      { names: ["memory_save", "memory_write"] },
     );
   },
 };
