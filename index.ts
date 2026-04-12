@@ -27,6 +27,9 @@ type AtlasPluginConfig = {
   autoInject?: boolean;
   autoInjectLimit?: number;
   autoInjectMinScore?: number;
+  agentId?: string;
+  agentRole?: string;
+  userId?: string;
 };
 
 type AtlasSearchItem = {
@@ -57,6 +60,9 @@ const configJsonSchema = {
     autoInject: { type: "boolean", default: true },
     autoInjectLimit: { type: "number", minimum: 1, maximum: 20, default: 5 },
     autoInjectMinScore: { type: "number", minimum: 0, maximum: 1, default: 0.04 },
+    agentId: { type: "string" },
+    agentRole: { type: "string" },
+    userId: { type: "string" },
   },
 } as const;
 
@@ -117,6 +123,9 @@ const configSchema: OpenClawPluginConfigSchema = {
     autoInject: { label: "Enable auto-recall" },
     autoInjectLimit: { label: "Auto-recall result limit", advanced: true },
     autoInjectMinScore: { label: "Auto-recall minimum score", advanced: true },
+    agentId: { label: "Agent ID", placeholder: "openclaw" },
+    agentRole: { label: "Agent role (human-readable)", placeholder: "OpenClaw助手" },
+    userId: { label: "User ID for tenant isolation", placeholder: "default" },
   },
 };
 
@@ -173,6 +182,18 @@ function resolveConfigBaseUrls(api: OpenClawPluginApi): string[] {
   return DEFAULT_BASE_URLS;
 }
 
+function resolveIdentity(api: OpenClawPluginApi): Record<string, string> {
+  const cfg = getPluginConfig(api);
+  const identity: Record<string, string> = {};
+  const agentId = cfg.agentId || process.env.ATLAS_AGENT_ID;
+  const agentRole = cfg.agentRole || process.env.ATLAS_AGENT_ROLE;
+  const userId = cfg.userId || process.env.ATLAS_USER_ID;
+  if (agentId) identity.agent_id = agentId;
+  if (agentRole) identity.agent_role = agentRole;
+  if (userId) identity.user_id = userId;
+  return identity;
+}
+
 function resolveTimeoutMs(api: OpenClawPluginApi): number {
   const cfg = getPluginConfig(api);
   const n = Number(cfg.timeoutMs);
@@ -211,7 +232,7 @@ async function atlasSearch(api: OpenClawPluginApi, query: string, limit: number)
   const data = (await fetchJsonFromAtlas(api, "/memories/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, limit }),
+    body: JSON.stringify({ query, limit, ...resolveIdentity(api) }),
   })) as { results?: AtlasSearchItem[] };
   return Array.isArray(data?.results) ? data.results : [];
 }
@@ -244,18 +265,20 @@ async function atlasSave(
   if (params.labels !== undefined) payload.labels = params.labels;
   if (params.metadata !== undefined) payload.metadata = params.metadata;
 
+  const identity = resolveIdentity(api);
+
   if (params.id) {
     return (await fetchJsonFromAtlas(api, `/memories/${encodeURIComponent(params.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, ...identity }),
     })) as AtlasMemoryRecord;
   }
 
   return (await fetchJsonFromAtlas(api, "/memories", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, ...identity }),
   })) as AtlasMemoryRecord;
 }
 
