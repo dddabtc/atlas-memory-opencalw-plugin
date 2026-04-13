@@ -1,33 +1,54 @@
 #!/usr/bin/env python3
 """File watcher that syncs workspace memory .md files to Atlas Memory.
 
-Watches:
-  1. /home/ubuntu/clawd/memory/  — daily notes
-  2. /root/.openclaw/workspace/MEMORY.md — long-term memory
+All configuration is taken from environment variables so the same script
+runs on any host with different openclaw layouts:
+
+  ATLAS_SYNC_WATCH_DIRS   Colon-separated directories to watch for *.md files.
+  ATLAS_SYNC_WATCH_FILES  Colon-separated specific .md files to watch.
+  ATLAS_SYNC_URL          Atlas /memories endpoint. Default: http://localhost:6420/memories
+  ATLAS_SYNC_HOSTNAME     Logical host label stored in metadata. Default: socket hostname.
+  ATLAS_SYNC_STATE        Path to state.json. Default: ~/.openclaw/atlas-memory-sync/state.json
 """
+
+from __future__ import annotations
 
 import json
 import logging
 import os
+import socket
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import List
 
 import requests
-from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler
 
-# Config
-WATCH_DIRS = [
-    Path("/home/ubuntu/clawd/memory"),
-]
-WATCH_FILES = [
-    Path("/root/.openclaw/workspace/MEMORY.md"),
-]
-STATE_FILE = Path.home() / ".openclaw" / "atlas-memory-sync" / "state.json"
-ATLAS_URL = "http://localhost:6420/memories"
-HOSTNAME = "op225"
+try:
+    from watchdog.observers import Observer
+    from watchdog.events import FileSystemEventHandler
+    HAS_WATCHDOG = True
+except ImportError:
+    HAS_WATCHDOG = False
+    Observer = None
+    FileSystemEventHandler = object
+
+
+def _split_paths(raw: str) -> List[Path]:
+    return [Path(p).expanduser() for p in raw.split(":") if p.strip()]
+
+
+WATCH_DIRS = _split_paths(os.environ.get("ATLAS_SYNC_WATCH_DIRS", ""))
+WATCH_FILES = _split_paths(os.environ.get("ATLAS_SYNC_WATCH_FILES", ""))
+ATLAS_URL = os.environ.get("ATLAS_SYNC_URL", "http://localhost:6420/memories")
+HOSTNAME = os.environ.get("ATLAS_SYNC_HOSTNAME", socket.gethostname())
+USER_ID = os.environ.get("ATLAS_SYNC_USER_ID", "")
+AGENT_ID = os.environ.get("ATLAS_SYNC_AGENT_ID", "")
+STATE_FILE = Path(os.environ.get(
+    "ATLAS_SYNC_STATE",
+    str(Path.home() / ".openclaw" / "atlas-memory-sync" / "state.json"),
+))
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,21 +67,18 @@ def load_state() -> dict:
     return {}
 
 
-def save_state(state: dict):
+def save_state(state: dict) -> None:
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
     STATE_FILE.write_text(json.dumps(state, indent=2))
 
 
 def make_source(filepath: Path) -> str:
-    """Determine source tag based on file location."""
-    s = str(filepath)
-    if "MEMORY.md" in s:
+    if filepath.name == "MEMORY.md":
         return "openclaw-longterm"
     return "openclaw-daily"
 
 
 def sync_file(filepath: Path, state: dict) -> bool:
-    """Sync a single .md file to Atlas. Returns True if synced."""
     if not filepath.is_file() or filepath.suffix != ".md":
         return False
 
@@ -70,7 +88,6 @@ def sync_file(filepath: Path, state: dict) -> bool:
     except OSError:
         return False
 
-    # Skip if mtime unchanged
     if key in state and state[key].get("mtime") == mtime:
         return False
 
@@ -83,13 +100,11 @@ def sync_file(filepath: Path, state: dict) -> bool:
     if not content.strip():
         return False
 
-    source = make_source(filepath)
     existing_id = state.get(key, {}).get("atlas_id")
-
     payload = {
         "content": content,
         "title": filepath.stem,
-        "source": source,
+        "source": make_source(filepath),
         "metadata": {
             "source_host": HOSTNAME,
             "file": filepath.name,
@@ -97,13 +112,15 @@ def sync_file(filepath: Path, state: dict) -> bool:
             "synced_at": datetime.now(timezone.utc).isoformat(),
         },
     }
+    if USER_ID:
+        payload["user_id"] = USER_ID
+    if AGENT_ID:
+        payload["agent_id"] = AGENT_ID
 
     try:
         if existing_id:
-            # Update existing memory
             resp = requests.patch(f"{ATLAS_URL}/{existing_id}", json=payload, timeout=10)
             if resp.status_code == 404:
-                # Memory was deleted, create new
                 existing_id = None
                 resp = requests.post(ATLAS_URL, json=payload, timeout=10)
         else:
@@ -122,8 +139,7 @@ def sync_file(filepath: Path, state: dict) -> bool:
         return False
 
 
-def initial_scan(state: dict):
-    """Scan all .md files and sync any missing/changed ones."""
+def initial_scan(state: dict) -> None:
     count = 0
     for d in WATCH_DIRS:
         if not d.exists():
@@ -161,36 +177,51 @@ class SyncHandler(FileSystemEventHandler):
             sync_file(p, self.state)
 
 
-def main():
-    log.info("Starting atlas-memory-sync")
+def main() -> None:
+    if not WATCH_DIRS and not WATCH_FILES:
+        log.error("No watch targets. Set ATLAS_SYNC_WATCH_DIRS and/or ATLAS_SYNC_WATCH_FILES.")
+        sys.exit(2)
+    log.info("atlas-memory-sync starting (host=%s atlas=%s)", HOSTNAME, ATLAS_URL)
+    for d in WATCH_DIRS:
+        log.info("  watch dir:  %s", d)
+    for f in WATCH_FILES:
+        log.info("  watch file: %s", f)
+
     state = load_state()
     initial_scan(state)
 
-    observer = Observer()
-    handler = SyncHandler(state)
-
-    for d in WATCH_DIRS:
-        d.mkdir(parents=True, exist_ok=True)
-        observer.schedule(handler, str(d), recursive=False)
-        log.info("Watching directory: %s", d)
-
-    for f in WATCH_FILES:
-        if f.parent.exists():
-            observer.schedule(handler, str(f.parent), recursive=False)
-            log.info("Watching file: %s", f)
-
-    observer.start()
-
-    try:
-        while True:
-            # Periodic re-scan every 5 minutes to catch missed changes
-            time.sleep(300)
-            for f in WATCH_FILES:
-                sync_file(f, state)
-    except KeyboardInterrupt:
-        observer.stop()
-    observer.join()
-    log.info("Stopped.")
+    if HAS_WATCHDOG:
+        log.info("mode: watchdog (inotify) + 5min rescan")
+        observer = Observer()
+        handler = SyncHandler(state)
+        for d in WATCH_DIRS:
+            d.mkdir(parents=True, exist_ok=True)
+            observer.schedule(handler, str(d), recursive=False)
+        for f in WATCH_FILES:
+            if f.parent.exists():
+                observer.schedule(handler, str(f.parent), recursive=False)
+        observer.start()
+        try:
+            while True:
+                time.sleep(300)
+                for f in WATCH_FILES:
+                    sync_file(f, state)
+        except KeyboardInterrupt:
+            observer.stop()
+        observer.join()
+    else:
+        log.info("mode: polling every 15s (watchdog not installed)")
+        try:
+            while True:
+                for d in WATCH_DIRS:
+                    if d.exists():
+                        for f in d.glob("*.md"):
+                            sync_file(f, state)
+                for f in WATCH_FILES:
+                    sync_file(f, state)
+                time.sleep(15)
+        except KeyboardInterrupt:
+            pass
 
 
 if __name__ == "__main__":
