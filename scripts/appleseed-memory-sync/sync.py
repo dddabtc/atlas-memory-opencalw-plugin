@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""File watcher that syncs workspace memory .md files to Atlas Memory.
+"""File watcher that syncs workspace memory .md files to Appleseed Memory.
 
 All configuration is taken from environment variables so the same script
 runs on any host with different openclaw layouts:
 
-  ATLAS_SYNC_WATCH_DIRS   Colon-separated directories to watch for *.md files.
-  ATLAS_SYNC_WATCH_FILES  Colon-separated specific .md files to watch.
-  ATLAS_SYNC_URL          Atlas /memories endpoint. Default: http://localhost:6420/memories
-  ATLAS_SYNC_HOSTNAME     Logical host label stored in metadata. Default: socket hostname.
-  ATLAS_SYNC_STATE        Path to state.json. Default: ~/.openclaw/atlas-memory-sync/state.json
+  APPLESEED_SYNC_WATCH_DIRS   Colon-separated directories to watch for *.md files.
+  APPLESEED_SYNC_WATCH_FILES  Colon-separated specific .md files to watch.
+  APPLESEED_SYNC_URL          Appleseed /memories endpoint. Default: http://localhost:6420/memories
+  APPLESEED_SYNC_HOSTNAME     Logical host label stored in metadata. Default: socket hostname.
+  APPLESEED_SYNC_STATE        Path to state.json. Default: ~/.openclaw/appleseed-memory-sync/state.json
 """
 
 from __future__ import annotations
@@ -39,15 +39,15 @@ def _split_paths(raw: str) -> List[Path]:
     return [Path(p).expanduser() for p in raw.split(":") if p.strip()]
 
 
-WATCH_DIRS = _split_paths(os.environ.get("ATLAS_SYNC_WATCH_DIRS", ""))
-WATCH_FILES = _split_paths(os.environ.get("ATLAS_SYNC_WATCH_FILES", ""))
-ATLAS_URL = os.environ.get("ATLAS_SYNC_URL", "http://localhost:6420/memories")
-HOSTNAME = os.environ.get("ATLAS_SYNC_HOSTNAME", socket.gethostname())
-USER_ID = os.environ.get("ATLAS_SYNC_USER_ID", "")
-AGENT_ID = os.environ.get("ATLAS_SYNC_AGENT_ID", "")
+WATCH_DIRS = _split_paths(os.environ.get("APPLESEED_SYNC_WATCH_DIRS", ""))
+WATCH_FILES = _split_paths(os.environ.get("APPLESEED_SYNC_WATCH_FILES", ""))
+APPLESEED_URL = os.environ.get("APPLESEED_SYNC_URL", "http://localhost:6420/memories")
+HOSTNAME = os.environ.get("APPLESEED_SYNC_HOSTNAME", socket.gethostname())
+USER_ID = os.environ.get("APPLESEED_SYNC_USER_ID", "")
+AGENT_ID = os.environ.get("APPLESEED_SYNC_AGENT_ID", "")
 STATE_FILE = Path(os.environ.get(
-    "ATLAS_SYNC_STATE",
-    str(Path.home() / ".openclaw" / "atlas-memory-sync" / "state.json"),
+    "APPLESEED_SYNC_STATE",
+    str(Path.home() / ".openclaw" / "appleseed-memory-sync" / "state.json"),
 ))
 
 logging.basicConfig(
@@ -55,7 +55,7 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
     stream=sys.stdout,
 )
-log = logging.getLogger("atlas-sync")
+log = logging.getLogger("appleseed-sync")
 
 
 def load_state() -> dict:
@@ -100,7 +100,7 @@ def sync_file(filepath: Path, state: dict) -> bool:
     if not content.strip():
         return False
 
-    existing_id = state.get(key, {}).get("atlas_id")
+    existing_id = state.get(key, {}).get("appleseed_id")
     payload = {
         "content": content,
         "title": filepath.stem,
@@ -119,20 +119,20 @@ def sync_file(filepath: Path, state: dict) -> bool:
 
     try:
         if existing_id:
-            resp = requests.patch(f"{ATLAS_URL}/{existing_id}", json=payload, timeout=10)
+            resp = requests.patch(f"{APPLESEED_URL}/{existing_id}", json=payload, timeout=10)
             if resp.status_code == 404:
                 existing_id = None
-                resp = requests.post(ATLAS_URL, json=payload, timeout=10)
+                resp = requests.post(APPLESEED_URL, json=payload, timeout=10)
         else:
-            resp = requests.post(ATLAS_URL, json=payload, timeout=10)
+            resp = requests.post(APPLESEED_URL, json=payload, timeout=10)
 
         resp.raise_for_status()
         data = resp.json()
-        atlas_id = data.get("id") or existing_id or "unknown"
-        state[key] = {"mtime": mtime, "atlas_id": atlas_id}
+        appleseed_id = data.get("id") or existing_id or "unknown"
+        state[key] = {"mtime": mtime, "appleseed_id": appleseed_id}
         save_state(state)
         action = "updated" if existing_id else "created"
-        log.info("%s %s -> %s", action, filepath.name, atlas_id)
+        log.info("%s %s -> %s", action, filepath.name, appleseed_id)
         return True
     except Exception as e:
         log.error("Failed to sync %s: %s", filepath.name, e)
@@ -179,9 +179,9 @@ class SyncHandler(FileSystemEventHandler):
 
 def main() -> None:
     if not WATCH_DIRS and not WATCH_FILES:
-        log.error("No watch targets. Set ATLAS_SYNC_WATCH_DIRS and/or ATLAS_SYNC_WATCH_FILES.")
+        log.error("No watch targets. Set APPLESEED_SYNC_WATCH_DIRS and/or APPLESEED_SYNC_WATCH_FILES.")
         sys.exit(2)
-    log.info("atlas-memory-sync starting (host=%s atlas=%s)", HOSTNAME, ATLAS_URL)
+    log.info("appleseed-memory-sync starting (host=%s appleseed=%s)", HOSTNAME, APPLESEED_URL)
     for d in WATCH_DIRS:
         log.info("  watch dir:  %s", d)
     for f in WATCH_FILES:

@@ -1,6 +1,6 @@
-# atlas-memory-sync
+# appleseed-memory-sync
 
-Watches an agent's Markdown notes (daily logs + long-term `MEMORY.md`) and pushes them into [Atlas Memory](https://github.com/dddabtc/atlas-memory) via the `/memories` REST API.
+Watches an agent's Markdown notes (daily logs + long-term `MEMORY.md`) and pushes them into [Appleseed Memory](https://github.com/dddabtc/appleseed-memory) via the `/memories` REST API.
 
 Works on Linux (systemd, system or user mode) and macOS (launchd).
 
@@ -17,7 +17,7 @@ Only paths that actually exist and contain `.md` files are added to the service.
 
 ```bash
 bash install.sh --agent openclaw                          \
-                --atlas http://100.119.6.34:6420/memories \
+                --appleseed http://100.119.6.34:6420/memories \
                 --user-id  dda                            \
                 --agent-id dda225-root@vps
 ```
@@ -30,7 +30,7 @@ You'll be shown the detected paths and asked to confirm. Add `--yes` to skip.
 |---|---|---|
 | `--agent` | `openclaw` or `hermes` | *required* |
 | `--home` | Agent home dir override | `~/.<agent>` |
-| `--atlas` | Atlas `/memories` URL | `http://localhost:6420/memories` |
+| `--appleseed` | Appleseed `/memories` URL | `http://localhost:6420/memories` |
 | `--user-id` | Attached to each memory | empty |
 | `--agent-id` | Attached to each memory | empty |
 | `--hostname` | Label for metadata | `$(hostname)` |
@@ -44,7 +44,7 @@ You'll be shown the detected paths and asked to confirm. Add `--yes` to skip.
 ```bash
 bash install.sh --agent openclaw \
   --watch-dir /home/ubuntu/clawd/memory \
-  --atlas http://localhost:6420/memories \
+  --appleseed http://localhost:6420/memories \
   --user-id dda --agent-id dda225-root \
   --yes
 ```
@@ -61,21 +61,21 @@ The installer picks the right service manager automatically:
 
 ```bash
 # system systemd:
-systemctl status atlas-memory-sync
-journalctl -u atlas-memory-sync -f
+systemctl status appleseed-memory-sync
+journalctl -u appleseed-memory-sync -f
 
 # user systemd:
-systemctl --user status atlas-memory-sync
+systemctl --user status appleseed-memory-sync
 
 # launchd:
-launchctl list | grep atlas.memory.sync
-tail -f ~/.openclaw/atlas-memory-sync/stdout.log
+launchctl list | grep appleseed.memory.sync
+tail -f ~/.openclaw/appleseed-memory-sync/stdout.log
 ```
 
 ## How it works
 
-- State file `~/.openclaw/atlas-memory-sync/state.json` maps each file path to `(mtime, atlas_id)`.
-- On start, every watched `.md` is POSTed if new (no `atlas_id`) or PATCHed if its `mtime` changed.
+- State file `~/.openclaw/appleseed-memory-sync/state.json` maps each file path to `(mtime, appleseed_id)`.
+- On start, every watched `.md` is POSTed if new (no `appleseed_id`) or PATCHed if its `mtime` changed.
 - While running, filesystem events trigger the same sync. Without `watchdog` installed the service falls back to a 15s polling loop.
 - A 5-minute periodic rescan covers missed events (e.g. editor save patterns that defeat inotify).
 
@@ -83,10 +83,10 @@ All configuration flows through environment variables set in the service unit:
 
 | Variable | Purpose |
 |---|---|
-| `ATLAS_SYNC_WATCH_DIRS`  | Colon-separated directories |
-| `ATLAS_SYNC_WATCH_FILES` | Colon-separated file paths |
-| `ATLAS_SYNC_URL`         | Atlas `/memories` endpoint |
-| `ATLAS_SYNC_HOSTNAME`    | Free-form host label |
-| `ATLAS_SYNC_USER_ID`     | `user_id` on every payload |
-| `ATLAS_SYNC_AGENT_ID`    | `agent_id` on every payload |
-| `ATLAS_SYNC_STATE`       | Override state.json location |
+| `APPLESEED_SYNC_WATCH_DIRS`  | Colon-separated directories |
+| `APPLESEED_SYNC_WATCH_FILES` | Colon-separated file paths |
+| `APPLESEED_SYNC_URL`         | Appleseed `/memories` endpoint |
+| `APPLESEED_SYNC_HOSTNAME`    | Free-form host label |
+| `APPLESEED_SYNC_USER_ID`     | `user_id` on every payload |
+| `APPLESEED_SYNC_AGENT_ID`    | `agent_id` on every payload |
+| `APPLESEED_SYNC_STATE`       | Override state.json location |

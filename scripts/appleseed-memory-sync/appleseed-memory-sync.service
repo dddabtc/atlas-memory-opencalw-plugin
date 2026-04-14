@@ -1,0 +1,14 @@
+[Unit]
+Description=Appleseed Memory File Sync
+After=network.target appleseed-memory.service
+Wants=appleseed-memory.service
+
+[Service]
+Type=simple
+WorkingDirectory=/root/.openclaw/appleseed-memory-sync
+ExecStart=/usr/bin/python3 /root/.openclaw/appleseed-memory-sync/sync.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
