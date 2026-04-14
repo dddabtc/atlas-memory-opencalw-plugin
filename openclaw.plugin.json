@@ -1,7 +1,7 @@
 {
-  "id": "atlas-memory-opencalw-plugin",
-  "name": "Atlas Memory OpenClaw Plugin",
-  "description": "Atlas-backed memory_search/memory_get/memory_save plus auto-recall injection.",
+  "id": "appleseed-memory-opencalw-plugin",
+  "name": "Appleseed Memory OpenClaw Plugin",
+  "description": "Appleseed-backed memory_search/memory_get/memory_save plus auto-recall injection.",
   "kind": "memory",
   "configSchema": {
     "type": "object",

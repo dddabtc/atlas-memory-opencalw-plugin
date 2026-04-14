@@ -1,10 +1,10 @@
-# atlas-memory-opencalw-plugin
+# appleseed-memory-opencalw-plugin
 
-Atlas-backed replacement for OpenClaw `memory_search`, `memory_get`, and `memory_save`.
+Appleseed-backed replacement for OpenClaw `memory_search`, `memory_get`, and `memory_save`.
 
 ## Purpose
 
-Provide a stable, rollback-friendly way to route memory recall directly to Atlas Memory,
+Provide a stable, rollback-friendly way to route memory recall directly to Appleseed Memory,
 without hot-editing OpenClaw stock plugin files.
 
 Updated for the OpenClaw 2026.4.x plugin SDK:
@@ -15,7 +15,7 @@ Updated for the OpenClaw 2026.4.x plugin SDK:
 
 ## Plugin ID
 
-`atlas-memory-opencalw-plugin`
+`appleseed-memory-opencalw-plugin`
 
 ## Features
 
@@ -23,12 +23,12 @@ Updated for the OpenClaw 2026.4.x plugin SDK:
 - `memory_get`
 - `memory_save`
 - `memory_write` alias for save/update flows
-- automatic Atlas memory recall injection before prompt build
+- automatic appleseed memory recall injection before prompt build
 
 ## Install / Enable
 
 ```bash
-openclaw plugins install /home/ubuntu/.openclaw/plugins/atlas-memory-opencalw-plugin --link
+openclaw plugins install /home/ubuntu/.openclaw/plugins/appleseed-memory-opencalw-plugin --link
 openclaw gateway restart
 ```
 
@@ -36,7 +36,7 @@ Then verify:
 
 ```bash
 openclaw status
-openclaw plugins list | grep -E "atlas-memory-opencalw-plugin|memory-core|memory-lancedb"
+openclaw plugins list | grep -E "appleseed-memory-opencalw-plugin|memory-core|memory-lancedb"
 ```
 
 ## Config
@@ -47,7 +47,7 @@ This plugin reads config from the existing OpenClaw plugin entry:
 {
   "plugins": {
     "entries": {
-      "atlas-memory-opencalw-plugin": {
+      "appleseed-memory-opencalw-plugin": {
         "enabled": true,
         "config": {
           "baseUrl": "http://100.119.6.34:6420",
@@ -66,8 +66,8 @@ It also respects these fallbacks, in order:
 1. `agents.defaults.memorySearch.remote.baseUrl`
 2. plugin `config.baseUrls`
 3. plugin `config.baseUrl`
-4. `ATLAS_MEMORY_BASE_URL`
-5. `ATLAS_BASE_URL`
+4. `APPLESEED_MEMORY_BASE_URL`
+5. `APPLESEED_BASE_URL`
 
 ## Multi-Agent Identity
 
@@ -84,18 +84,18 @@ All API requests automatically include `agent_id`, `agent_role`, and `user_id` f
 }
 ```
 
-Or via environment variables: `ATLAS_AGENT_ID`, `ATLAS_AGENT_ROLE`, `ATLAS_USER_ID`.
+Or via environment variables: `APPLESEED_AGENT_ID`, `APPLESEED_AGENT_ROLE`, `APPLESEED_USER_ID`.
 
-If not configured, the Atlas server auto-fills `agent_id` from the client IP.
+If not configured, the Appleseed server auto-fills `agent_id` from the client IP.
 
 ## Hermes Agent Installation
 
-[Hermes Agent](https://github.com/NousResearch/hermes-agent) natively supports MCP servers. You can connect Atlas Memory as an MCP tool server without this OpenClaw plugin.
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) natively supports MCP servers. You can connect Appleseed Memory as an MCP tool server without this OpenClaw plugin.
 
 ### 1. Install the MCP proxy
 
 ```bash
-cd /path/to/atlas-memory
+cd /path/to/appleseed-memory
 pip install -e .
 ```
 
@@ -105,29 +105,29 @@ Edit `~/.hermes/config.yaml`:
 
 ```yaml
 mcp_servers:
-  atlas-memory:
+  appleseed-memory:
     command: "python3"
-    args: ["-m", "atlas_memory.mcp.remote_proxy"]
+    args: ["-m", "appleseed_memory.mcp.remote_proxy"]
     env:
-      ATLAS_REMOTE_URL: "http://100.119.6.34:6420"
-      ATLAS_AGENT_ID: "hermes"
-      ATLAS_AGENT_ROLE: "Hermes助手"
-      ATLAS_USER_ID: "zdl"
+      APPLESEED_REMOTE_URL: "http://100.119.6.34:6420"
+      APPLESEED_AGENT_ID: "hermes"
+      APPLESEED_AGENT_ROLE: "Hermes助手"
+      APPLESEED_USER_ID: "zdl"
 ```
 
-This gives Hermes three tools: `mcp_atlas-memory_memory_search`, `mcp_atlas-memory_memory_store`, `mcp_atlas-memory_memory_list`.
+This gives Hermes three tools: `mcp_appleseed-memory_memory_search`, `mcp_appleseed-memory_memory_store`, `mcp_appleseed-memory_memory_list`.
 
 ### 3. Verify
 
 ```bash
 hermes chat
-> /tools            # should list atlas-memory tools
+> /tools            # should list appleseed-memory tools
 > search my preferences   # triggers memory_search
 ```
 
 ### Alternative: Direct HTTP (no MCP proxy needed)
 
-If your Atlas Memory server is reachable over HTTP, you can skip the MCP proxy and call the REST API directly from a Hermes skill or custom tool. The endpoints are:
+If your Appleseed Memory server is reachable over HTTP, you can skip the MCP proxy and call the REST API directly from a Hermes skill or custom tool. The endpoints are:
 
 | Method | Endpoint | Body |
 |--------|----------|------|
@@ -135,7 +135,7 @@ If your Atlas Memory server is reachable over HTTP, you can skip the MCP proxy a
 | `POST` | `/memories` | `{"content": "...", "title": "...", "agent_id": "hermes", "user_id": "zdl"}` |
 | `GET` | `/memories?user_id=zdl` | — |
 
-## API Contract (Atlas)
+## API Contract (Appleseed)
 
 - Search: `POST /memories/search` with `{ query, limit }`
 - Get: `GET /memories/{id}`
@@ -144,16 +144,16 @@ If your Atlas Memory server is reachable over HTTP, you can skip the MCP proxy a
 
 ## Notes
 
-- Keeps compatibility with Atlas API endpoints already in use.
+- Keeps compatibility with Appleseed API endpoints already in use.
 - Keeps existing OpenClaw config shape; no `openclaw.json` migration required.
 - `memory_get` accepts either:
-  - `atlas:<uuid>`
-  - any path containing an Atlas UUID
+  - `appleseed:<uuid>`
+  - any path containing an Appleseed UUID
 
 ## Rollback
 
 ```bash
-openclaw plugins disable atlas-memory-opencalw-plugin
+openclaw plugins disable appleseed-memory-opencalw-plugin
 openclaw plugins enable memory-core
 openclaw gateway restart
 ```

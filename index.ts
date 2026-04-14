@@ -17,10 +17,10 @@ function jsonResult(payload: unknown) {
 }
 
 const DEFAULT_BASE_URLS: string[] = [];
-const PLUGIN_ID = "atlas-memory-opencalw-plugin";
+const PLUGIN_ID = "appleseed-memory-opencalw-plugin";
 const DEFAULT_TIMEOUT_MS = 5000;
 
-type AtlasPluginConfig = {
+type AppleseedPluginConfig = {
   baseUrl?: string;
   baseUrls?: string[];
   timeoutMs?: number;
@@ -32,7 +32,7 @@ type AtlasPluginConfig = {
   userId?: string;
 };
 
-type AtlasSearchItem = {
+type AppleseedSearchItem = {
   id: string;
   title?: string;
   content?: string;
@@ -40,7 +40,7 @@ type AtlasSearchItem = {
   updated_at?: string;
 };
 
-type AtlasMemoryRecord = {
+type AppleseedMemoryRecord = {
   id: string;
   title?: string;
   content?: string;
@@ -117,8 +117,8 @@ const configSchema: OpenClawPluginConfigSchema = {
     return errors.length > 0 ? { ok: false, errors } : { ok: true, value };
   },
   uiHints: {
-    baseUrl: { label: "Atlas base URL", placeholder: "http://100.119.6.34:6420" },
-    baseUrls: { label: "Atlas base URLs", help: "Tried in order until one responds.", advanced: true },
+    baseUrl: { label: "Appleseed base URL", placeholder: "http://100.119.6.34:6420" },
+    baseUrls: { label: "Appleseed base URLs", help: "Tried in order until one responds.", advanced: true },
     timeoutMs: { label: "Request timeout (ms)", advanced: true },
     autoInject: { label: "Enable auto-recall" },
     autoInjectLimit: { label: "Auto-recall result limit", advanced: true },
@@ -133,16 +133,16 @@ function normalizeBase(raw: string): string {
   return raw.replace(/\/+$/, "");
 }
 
-function getPluginConfig(api: OpenClawPluginApi): AtlasPluginConfig {
+function getPluginConfig(api: OpenClawPluginApi): AppleseedPluginConfig {
   const entry = api.config?.plugins?.entries?.[PLUGIN_ID] as
-    | { config?: AtlasPluginConfig }
-    | AtlasPluginConfig
+    | { config?: AppleseedPluginConfig }
+    | AppleseedPluginConfig
     | undefined;
 
   if (entry && "config" in entry && entry.config && typeof entry.config === "object") {
     return entry.config;
   }
-  return (entry ?? {}) as AtlasPluginConfig;
+  return (entry ?? {}) as AppleseedPluginConfig;
 }
 
 function resolveConfigBaseUrls(api: OpenClawPluginApi): string[] {
@@ -173,11 +173,11 @@ function resolveConfigBaseUrls(api: OpenClawPluginApi): string[] {
   if (typeof cfg.baseUrl === "string" && cfg.baseUrl.trim()) {
     return dedupe([normalizeBase(cfg.baseUrl.trim()), ...DEFAULT_BASE_URLS]);
   }
-  if (process.env.ATLAS_MEMORY_BASE_URL?.trim()) {
-    return dedupe([normalizeBase(process.env.ATLAS_MEMORY_BASE_URL.trim()), ...DEFAULT_BASE_URLS]);
+  if (process.env.APPLESEED_MEMORY_BASE_URL?.trim()) {
+    return dedupe([normalizeBase(process.env.APPLESEED_MEMORY_BASE_URL.trim()), ...DEFAULT_BASE_URLS]);
   }
-  if (process.env.ATLAS_BASE_URL?.trim()) {
-    return dedupe([normalizeBase(process.env.ATLAS_BASE_URL.trim()), ...DEFAULT_BASE_URLS]);
+  if (process.env.APPLESEED_BASE_URL?.trim()) {
+    return dedupe([normalizeBase(process.env.APPLESEED_BASE_URL.trim()), ...DEFAULT_BASE_URLS]);
   }
   return DEFAULT_BASE_URLS;
 }
@@ -185,9 +185,9 @@ function resolveConfigBaseUrls(api: OpenClawPluginApi): string[] {
 function resolveIdentity(api: OpenClawPluginApi): Record<string, string> {
   const cfg = getPluginConfig(api);
   const identity: Record<string, string> = {};
-  const agentId = cfg.agentId || process.env.ATLAS_AGENT_ID;
-  const agentRole = cfg.agentRole || process.env.ATLAS_AGENT_ROLE;
-  const userId = cfg.userId || process.env.ATLAS_USER_ID;
+  const agentId = cfg.agentId || process.env.APPLESEED_AGENT_ID;
+  const agentRole = cfg.agentRole || process.env.APPLESEED_AGENT_ROLE;
+  const userId = cfg.userId || process.env.APPLESEED_USER_ID;
   if (agentId) identity.agent_id = agentId;
   if (agentRole) identity.agent_role = agentRole;
   if (userId) identity.user_id = userId;
@@ -200,13 +200,13 @@ function resolveTimeoutMs(api: OpenClawPluginApi): number {
   return Number.isFinite(n) && n >= 500 ? Math.floor(n) : DEFAULT_TIMEOUT_MS;
 }
 
-async function fetchJsonFromAtlas(api: OpenClawPluginApi, path: string, init?: RequestInit): Promise<unknown> {
+async function fetchJsonFromAppleseed(api: OpenClawPluginApi, path: string, init?: RequestInit): Promise<unknown> {
   const bases = resolveConfigBaseUrls(api);
   const timeoutMs = resolveTimeoutMs(api);
   const errors: string[] = [];
 
   if (!bases.length) {
-    throw new Error("Atlas base URL not configured");
+    throw new Error("Appleseed base URL not configured");
   }
 
   for (const base of bases) {
@@ -225,23 +225,23 @@ async function fetchJsonFromAtlas(api: OpenClawPluginApi, path: string, init?: R
       clearTimeout(timer);
     }
   }
-  throw new Error(`Atlas unavailable (${errors.join("; ")})`);
+  throw new Error(`Appleseed unavailable (${errors.join("; ")})`);
 }
 
-async function atlasSearch(api: OpenClawPluginApi, query: string, limit: number): Promise<AtlasSearchItem[]> {
-  const data = (await fetchJsonFromAtlas(api, "/memories/search", {
+async function appleseedSearch(api: OpenClawPluginApi, query: string, limit: number): Promise<AppleseedSearchItem[]> {
+  const data = (await fetchJsonFromAppleseed(api, "/memories/search", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query, limit, ...resolveIdentity(api) }),
-  })) as { results?: AtlasSearchItem[] };
+  })) as { results?: AppleseedSearchItem[] };
   return Array.isArray(data?.results) ? data.results : [];
 }
 
-async function atlasGet(api: OpenClawPluginApi, id: string): Promise<AtlasMemoryRecord> {
-  return (await fetchJsonFromAtlas(api, `/memories/${encodeURIComponent(id)}`)) as AtlasMemoryRecord;
+async function appleseedGet(api: OpenClawPluginApi, id: string): Promise<AppleseedMemoryRecord> {
+  return (await fetchJsonFromAppleseed(api, `/memories/${encodeURIComponent(id)}`)) as AppleseedMemoryRecord;
 }
 
-async function atlasSave(
+async function appleseedSave(
   api: OpenClawPluginApi,
   params: {
     id?: string;
@@ -254,7 +254,7 @@ async function atlasSave(
     labels?: string[];
     metadata?: Record<string, unknown>;
   },
-): Promise<AtlasMemoryRecord> {
+): Promise<AppleseedMemoryRecord> {
   const payload: Record<string, unknown> = {};
   if (params.title !== undefined) payload.title = params.title;
   if (params.content !== undefined) payload.content = params.content;
@@ -268,23 +268,23 @@ async function atlasSave(
   const identity = resolveIdentity(api);
 
   if (params.id) {
-    return (await fetchJsonFromAtlas(api, `/memories/${encodeURIComponent(params.id)}`, {
+    return (await fetchJsonFromAppleseed(api, `/memories/${encodeURIComponent(params.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...payload, ...identity }),
-    })) as AtlasMemoryRecord;
+    })) as AppleseedMemoryRecord;
   }
 
-  return (await fetchJsonFromAtlas(api, "/memories", {
+  return (await fetchJsonFromAppleseed(api, "/memories", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...payload, ...identity }),
-  })) as AtlasMemoryRecord;
+  })) as AppleseedMemoryRecord;
 }
 
-function extractAtlasId(path: string): string | null {
+function extractAppleseedId(path: string): string | null {
   if (!path) return null;
-  if (path.startsWith("atlas:")) return path.slice("atlas:".length).trim() || null;
+  if (path.startsWith("appleseed:")) return path.slice("appleseed:".length).trim() || null;
 
   const m = path.match(/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})/i);
   return m?.[1] ?? null;
@@ -323,8 +323,8 @@ function truncateText(text: string, maxLen: number): string {
   return `${text.slice(0, maxLen)}...`;
 }
 
-function formatAutoRecallContext(rows: AtlasSearchItem[]): string {
-  const lines: string[] = ["[Atlas Memory Auto-Recall]"];
+function formatAutoRecallContext(rows: AppleseedSearchItem[]): string {
+  const lines: string[] = ["[Appleseed Memory Auto-Recall]"];
   rows.forEach((r, idx) => {
     const title = String(r.title ?? "(untitled)").trim() || "(untitled)";
     const snippetRaw = String(r.content ?? "").trim();
@@ -341,7 +341,7 @@ function createMemorySearchTool(api: OpenClawPluginApi): AnyAgentTool {
   return {
     label: "Memory Search",
     name: "memory_search",
-    description: "Atlas-backed recall: search prior work, decisions, dates, people, preferences, and todos.",
+    description: "Appleseed-backed recall: search prior work, decisions, dates, people, preferences, and todos.",
     parameters: {
       type: "object",
       properties: {
@@ -360,21 +360,21 @@ function createMemorySearchTool(api: OpenClawPluginApi): AnyAgentTool {
         const minScore = Number.isFinite(Number(params.minScore)) ? Number(params.minScore) : undefined;
 
         if (!query) {
-          return jsonResult({ results: [], provider: "atlas", mode: "atlas-direct" });
+          return jsonResult({ results: [], provider: "appleseed", mode: "appleseed-direct" });
         }
 
-        const rows = await atlasSearch(api, query, maxResults);
+        const rows = await appleseedSearch(api, query, maxResults);
         const filtered = minScore == null ? rows : rows.filter((r) => Number(r.score ?? 0) >= minScore);
 
         const results = filtered.map((r) => {
           const full = String(r.content ?? "");
           const snippet = full.length > 1200 ? `${full.slice(0, 1200)}...` : full;
           return {
-            path: `atlas:${r.id}`,
+            path: `appleseed:${r.id}`,
             text: snippet,
             score: Number(r.score ?? 0),
             title: r.title,
-            relPath: `atlas:${r.id}`,
+            relPath: `appleseed:${r.id}`,
             lineStart: 1,
             lineEnd: Math.max(1, snippet.split(/\r?\n/).length),
             snippet,
@@ -383,18 +383,18 @@ function createMemorySearchTool(api: OpenClawPluginApi): AnyAgentTool {
 
         return jsonResult({
           results,
-          provider: "atlas",
-          model: "atlas-memory",
+          provider: "appleseed",
+          model: "appleseed-memory",
           fallback: "none",
-          mode: "atlas-direct",
+          mode: "appleseed-direct",
         });
       } catch (err) {
         return jsonResult({
           results: [],
           disabled: true,
           error: err instanceof Error ? err.message : String(err),
-          provider: "atlas",
-          mode: "atlas-direct",
+          provider: "appleseed",
+          mode: "appleseed-direct",
         });
       }
     },
@@ -405,7 +405,7 @@ function createMemoryGetTool(api: OpenClawPluginApi): AnyAgentTool {
   return {
     label: "Memory Get",
     name: "memory_get",
-    description: "Read Atlas memory content by path atlas:<id>.",
+    description: "Read appleseed memory content by path appleseed:<id>.",
     parameters: {
       type: "object",
       properties: {
@@ -420,19 +420,19 @@ function createMemoryGetTool(api: OpenClawPluginApi): AnyAgentTool {
       const params = rawParams as ToolParams;
       const path = String(params.path ?? "").trim();
       try {
-        const id = extractAtlasId(path);
+        const id = extractAppleseedId(path);
         if (!id) {
           return jsonResult({
             path,
             text: "",
             disabled: true,
-            error: "Path must be atlas:<id> (or include an Atlas UUID).",
+            error: "Path must be appleseed:<id> (or include an appleseed UUID).",
           });
         }
-        const mem = await atlasGet(api, id);
+        const mem = await appleseedGet(api, id);
         const text = toLinesSlice(String(mem.content ?? ""), Number(params.from), Number(params.lines));
         return jsonResult({
-          path: `atlas:${id}`,
+          path: `appleseed:${id}`,
           text,
           title: mem.title,
         });
@@ -453,7 +453,7 @@ function createMemorySaveTool(api: OpenClawPluginApi): AnyAgentTool {
     label: "Memory Save",
     name: "memory_save",
     description:
-      "Create or update an Atlas memory. Omit id/path to create; provide id or atlas:<id> path to patch one.",
+      "Create or update an appleseed memory. Omit id/path to create; provide id or appleseed:<id> path to patch one.",
     parameters: {
       type: "object",
       properties: {
@@ -475,7 +475,7 @@ function createMemorySaveTool(api: OpenClawPluginApi): AnyAgentTool {
       try {
         const rawPath = typeof params.path === "string" ? params.path.trim() : "";
         const rawId = typeof params.id === "string" ? params.id.trim() : "";
-        const id = extractAtlasId(rawPath) ?? (rawId ? extractAtlasId(rawId) ?? rawId : undefined);
+        const id = extractAppleseedId(rawPath) ?? (rawId ? extractAppleseedId(rawId) ?? rawId : undefined);
         const title = typeof params.title === "string" ? params.title.trim() : undefined;
         const content = typeof params.content === "string" ? params.content : undefined;
 
@@ -486,7 +486,7 @@ function createMemorySaveTool(api: OpenClawPluginApi): AnyAgentTool {
           });
         }
 
-        const result = await atlasSave(api, {
+        const result = await appleseedSave(api, {
           id,
           title,
           content,
@@ -510,7 +510,7 @@ function createMemorySaveTool(api: OpenClawPluginApi): AnyAgentTool {
           ok: true,
           action: id ? "updated" : "created",
           id: savedId || undefined,
-          path: savedId ? `atlas:${savedId}` : undefined,
+          path: savedId ? `appleseed:${savedId}` : undefined,
           title: result.title ?? title,
           created_at: result.created_at,
           updated_at: result.updated_at,
@@ -540,7 +540,7 @@ async function handleBeforePromptBuild(
     if (!query) return;
 
     const minScore = resolveAutoInjectMinScore(api);
-    const rawRows = await atlasSearch(api, query, resolveAutoInjectLimit(api));
+    const rawRows = await appleseedSearch(api, query, resolveAutoInjectLimit(api));
     const rows = rawRows.filter((r) => Number(r.score ?? 0) >= minScore);
     if (rows.length === 0) return;
 
@@ -554,8 +554,8 @@ async function handleBeforePromptBuild(
 
 export default definePluginEntry({
   id: PLUGIN_ID,
-  name: "Atlas Memory OpenClaw Plugin",
-  description: "Atlas-backed memory_search/memory_get/memory_save with OpenClaw-compatible result shape.",
+  name: "Appleseed Memory OpenClaw Plugin",
+  description: "Appleseed-backed memory_search/memory_get/memory_save with OpenClaw-compatible result shape.",
   kind: "memory",
   configSchema,
   register(api) {

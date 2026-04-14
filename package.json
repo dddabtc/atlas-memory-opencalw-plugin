@@ -1,8 +1,8 @@
 {
-  "name": "atlas-memory-opencalw-plugin",
+  "name": "appleseed-memory-opencalw-plugin",
   "version": "0.2.0",
   "private": true,
-  "description": "Atlas-backed memory plugin for OpenClaw",
+  "description": "Appleseed-backed memory plugin for OpenClaw",
   "type": "module",
   "main": "index.ts",
   "openclaw": {
